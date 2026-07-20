@@ -74,7 +74,7 @@ def load_data():
         how='left'
     )
 
-    # Fallback: merge só por código (caso vendedor não bata)
+    # Fallback: merge só por código
     df_fallback = df_bi.merge(
         df_base[['codigo_cliente', 'nome_cliente', 'nome_vendedor_base', 'Cliente_Coligacao', 'Nome_Coordenador']],
         on='codigo_cliente',
@@ -82,7 +82,7 @@ def load_data():
         suffixes=('', '_fb')
     )
 
-    # Preencher vazios do merge principal com o fallback
+    # Preencher vazios do merge principal
     for col in ['nome_cliente', 'Cliente_Coligacao', 'Nome_Coordenador']:
         if col in df_merged.columns and f'{col}_fb' in df_fallback.columns:
             df_merged[col] = df_merged[col].fillna(df_fallback[f'{col}_fb'])
@@ -106,7 +106,7 @@ INDUSTRIAS = [i for i in INDUSTRIAS if i.strip() != '']
 TOTAL_INDUSTRIAS = len(INDUSTRIAS)
 
 # ============================================================
-# FILTROS
+# FILTROS (VENDEDOR OBRIGATÓRIO, SEM COORDENADOR)
 # ============================================================
 st.sidebar.header("🎯 Filtros")
 
@@ -137,53 +137,31 @@ st.sidebar.markdown(
 )
 
 if not st.query_params:
-    for key in ['coordenador', 'vendedor', 'coligacao', 'ano', 'mes', 'industria_filtro', 'modo_gap']:
+    for key in ['vendedor', 'coligacao', 'ano', 'mes', 'industria_filtro', 'modo_gap']:
         st.session_state.pop(key, None)
 
-# Coordenador
-lista_coordenadores = ["Todos"] + sorted(df_base['Nome_Coordenador'].dropna().unique().tolist())
-if 'coordenador' not in st.session_state:
-    st.session_state['coordenador'] = 'Todos'
-if st.session_state['coordenador'] not in lista_coordenadores:
-    st.session_state['coordenador'] = 'Todos'
-
-coordenador_selecionado = st.sidebar.selectbox(
-    "Coordenador", lista_coordenadores,
-    index=lista_coordenadores.index(st.session_state['coordenador']),
-    key='coordenador_select'
-)
-st.session_state['coordenador'] = coordenador_selecionado
-
-# Vendedor
-if coordenador_selecionado != "Todos":
-    vendedores_filtrados = df_base[df_base['Nome_Coordenador'] == coordenador_selecionado]['nome_vendedor_base'].dropna().unique()
-else:
-    vendedores_filtrados = df_base['nome_vendedor_base'].dropna().unique()
-
-lista_vendedores = ["Todos"] + sorted(vendedores_filtrados.tolist())
-if 'vendedor' not in st.session_state:
-    st.session_state['vendedor'] = 'Todos'
-if st.session_state['vendedor'] not in lista_vendedores:
-    st.session_state['vendedor'] = 'Todos'
+# --- VENDEDOR (OBRIGATÓRIO) ---
+lista_vendedores = sorted(df_base['nome_vendedor_base'].dropna().unique().tolist())
+if 'vendedor' not in st.session_state or st.session_state['vendedor'] not in lista_vendedores:
+    st.session_state['vendedor'] = None
 
 vendedor_selecionado = st.sidebar.selectbox(
-    "Vendedor", lista_vendedores,
-    index=lista_vendedores.index(st.session_state['vendedor']),
+    "Selecione o Vendedor",
+    [""] + lista_vendedores,
+    index=0 if st.session_state['vendedor'] is None else lista_vendedores.index(st.session_state['vendedor']) + 1,
     key='vendedor_select'
 )
-st.session_state['vendedor'] = vendedor_selecionado
 
-# Coligação
-if vendedor_selecionado != "Todos":
-    clientes_do_vendedor = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado]['codigo_cliente'].unique()
-    coligacoes_filtradas = df_base[df_base['codigo_cliente'].isin(clientes_do_vendedor)]['Cliente_Coligacao'].dropna().unique()
-elif coordenador_selecionado != "Todos":
-    vendedores_do_coord = df_base[df_base['Nome_Coordenador'] == coordenador_selecionado]['nome_vendedor_base'].unique()
-    clientes_do_coord = df_base[df_base['nome_vendedor_base'].isin(vendedores_do_coord)]['codigo_cliente'].unique()
-    coligacoes_filtradas = df_base[df_base['codigo_cliente'].isin(clientes_do_coord)]['Cliente_Coligacao'].dropna().unique()
+if vendedor_selecionado == "":
+    st.session_state['vendedor'] = None
+    st.warning("Por favor, selecione um vendedor para visualizar os dados.")
+    st.stop()
 else:
-    coligacoes_filtradas = df_base['Cliente_Coligacao'].dropna().unique()
+    st.session_state['vendedor'] = vendedor_selecionado
 
+# --- COLIGAÇÃO ---
+clientes_do_vendedor = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado]['codigo_cliente'].unique()
+coligacoes_filtradas = df_base[df_base['codigo_cliente'].isin(clientes_do_vendedor)]['Cliente_Coligacao'].dropna().unique()
 lista_coligacoes = ["Todas"] + sorted(coligacoes_filtradas.tolist())
 if 'coligacao' not in st.session_state:
     st.session_state['coligacao'] = 'Todas'
@@ -197,7 +175,7 @@ coligacao_selecionada = st.sidebar.selectbox(
 )
 st.session_state['coligacao'] = coligacao_selecionada
 
-# Ano
+# --- ANO ---
 anos_disponiveis = sorted(df_merged['Ano'].dropna().unique())
 lista_anos = ["Todos"] + [str(int(a)) for a in anos_disponiveis]
 if 'ano' not in st.session_state:
@@ -212,7 +190,7 @@ ano_selecionado = st.sidebar.selectbox(
 )
 st.session_state['ano'] = ano_selecionado
 
-# Mês
+# --- MÊS ---
 if ano_selecionado != "Todos":
     meses_disponiveis = sorted(df_merged[df_merged['Ano'] == int(ano_selecionado)]['Mês'].dropna().unique())
 else:
@@ -236,7 +214,7 @@ mes_selecionado = st.sidebar.selectbox(
 )
 st.session_state['mes'] = mes_selecionado
 
-# Indústria
+# --- INDÚSTRIA ---
 st.sidebar.divider()
 st.sidebar.header("🏭 Filtro por Indústria")
 lista_industrias_filtro = ["Todas"] + INDUSTRIAS
@@ -252,7 +230,7 @@ industria_filtro = st.sidebar.selectbox(
 )
 st.session_state['industria_filtro'] = industria_filtro
 
-# Modo Gap
+# --- MODO GAP ---
 if 'modo_gap' not in st.session_state:
     st.session_state['modo_gap'] = False
 
@@ -264,14 +242,13 @@ modo_gap = st.sidebar.checkbox(
 st.session_state['modo_gap'] = modo_gap
 
 # ============================================================
-# APLICAR FILTROS
+# APLICAR FILTROS (sem coordenador)
 # ============================================================
 df_filtrado = df_merged.copy()
 
-if vendedor_selecionado != "Todos":
-    df_filtrado = df_filtrado[df_filtrado['nome_vendedor'] == vendedor_selecionado]
-if coordenador_selecionado != "Todos":
-    df_filtrado = df_filtrado[df_filtrado['Nome_Coordenador'] == coordenador_selecionado]
+# Vendedor sempre aplicado
+df_filtrado = df_filtrado[df_filtrado['nome_vendedor'] == vendedor_selecionado]
+
 if coligacao_selecionada != "Todas":
     df_filtrado = df_filtrado[df_filtrado['Cliente_Coligacao'] == coligacao_selecionada]
 if ano_selecionado != "Todos":
@@ -283,17 +260,23 @@ if industria_filtro != "Todas":
     df_filtrado = df_filtrado[df_filtrado['Nome_Fabricante'] == industria_filtro]
 
 # ============================================================
-# MÉTRICAS (5 CARDS EM 2 LINHAS)
+# MÉTRICAS DA CARTEIRA ATIVA (NOVO)
 # ============================================================
-if vendedor_selecionado != "Todos":
-    total_clientes_base = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado]['codigo_cliente'].nunique()
-elif coordenador_selecionado != "Todos":
-    vendedores_do_coord = df_base[df_base['Nome_Coordenador'] == coordenador_selecionado]['nome_vendedor_base'].unique()
-    total_clientes_base = df_base[df_base['nome_vendedor_base'].isin(vendedores_do_coord)]['codigo_cliente'].nunique()
-elif coligacao_selecionada != "Todas":
-    total_clientes_base = df_base[df_base['Cliente_Coligacao'] == coligacao_selecionada]['codigo_cliente'].nunique()
-else:
-    total_clientes_base = df_base['codigo_cliente'].nunique()
+total_clientes_ativos = df_filtrado['codigo_cliente'].nunique()
+total_positivados_ativos = df_filtrado[df_filtrado['Nome_Fabricante'].notna()]['codigo_cliente'].nunique()
+pct_positivacao_ativa = (total_positivados_ativos / total_clientes_ativos * 100) if total_clientes_ativos > 0 else 0
+
+col_a1, col_a2, col_a3 = st.columns(3)
+col_a1.metric("📅 Carteira Ativa no Período", total_clientes_ativos)
+col_a2.metric("✅ Positivados no Período", total_positivados_ativos)
+col_a3.metric("📈 % Positivação (Carteira Ativa)", f"{pct_positivacao_ativa:.1f}%")
+
+st.divider()
+
+# ============================================================
+# MÉTRICAS (5 CARDS EM 2 LINHAS) - Carteira Total
+# ============================================================
+total_clientes_base = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado]['codigo_cliente'].nunique()
 
 clientes_positivados_ids = df_filtrado[df_filtrado['Nome_Fabricante'].notna()]['codigo_cliente'].unique()
 total_clientes_positivados = len(clientes_positivados_ids)
@@ -301,13 +284,12 @@ pct_positivacao = (total_clientes_positivados / total_clientes_base * 100) if to
 
 cobertura_por_cliente = df_filtrado.groupby('codigo_cliente')['Nome_Fabricante'].nunique()
 cobertura_media = cobertura_por_cliente.mean() if len(cobertura_por_cliente) > 0 else 0
-
 cobertura_total = df_filtrado[['codigo_cliente', 'Nome_Fabricante']].dropna().drop_duplicates().shape[0]
 
 col1, col2, col3 = st.columns(3)
 col1.metric("📋 Clientes na Carteira", total_clientes_base)
 col2.metric("✅ Clientes Positivados", total_clientes_positivados)
-col3.metric("📈 % Positivação", f"{pct_positivacao:.1f}%")
+col3.metric("📈 % Positivação (Carteira Total)", f"{pct_positivacao:.1f}%")
 
 col4, col5 = st.columns(2)
 col4.metric("📊 Cobertura Média", f"{cobertura_media:.1f} ind/cliente")
@@ -321,10 +303,7 @@ st.divider()
 st.subheader("📅 Evolução Mensal")
 
 df_mensal = df_merged.copy()
-if vendedor_selecionado != "Todos":
-    df_mensal = df_mensal[df_mensal['nome_vendedor'] == vendedor_selecionado]
-if coordenador_selecionado != "Todos":
-    df_mensal = df_mensal[df_mensal['Nome_Coordenador'] == coordenador_selecionado]
+df_mensal = df_mensal[df_mensal['nome_vendedor'] == vendedor_selecionado]
 if coligacao_selecionada != "Todas":
     df_mensal = df_mensal[df_mensal['Cliente_Coligacao'] == coligacao_selecionada]
 if ano_selecionado != "Todos":
@@ -332,15 +311,7 @@ if ano_selecionado != "Todos":
 if industria_filtro != "Todas":
     df_mensal = df_mensal[df_mensal['Nome_Fabricante'] == industria_filtro]
 
-if vendedor_selecionado != "Todos":
-    base_fixa = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado]['codigo_cliente'].nunique()
-elif coordenador_selecionado != "Todos":
-    vendedores_do_coord = df_base[df_base['Nome_Coordenador'] == coordenador_selecionado]['nome_vendedor_base'].unique()
-    base_fixa = df_base[df_base['nome_vendedor_base'].isin(vendedores_do_coord)]['codigo_cliente'].nunique()
-elif coligacao_selecionada != "Todas":
-    base_fixa = df_base[df_base['Cliente_Coligacao'] == coligacao_selecionada]['codigo_cliente'].nunique()
-else:
-    base_fixa = df_base['codigo_cliente'].nunique()
+base_fixa = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado]['codigo_cliente'].nunique()
 
 evolucao_list = []
 meses_ordenados = sorted(df_mensal['Mês_Ano'].dropna().unique())
@@ -414,9 +385,7 @@ st.divider()
 if industria_filtro != "Todas" or modo_gap:
     st.subheader("🔍 Análise de GAPS")
     
-    df_base_filtrada_gap = df_base.copy()
-    if vendedor_selecionado != "Todos":
-        df_base_filtrada_gap = df_base_filtrada_gap[df_base_filtrada_gap['nome_vendedor_base'] == vendedor_selecionado]
+    df_base_filtrada_gap = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado]
     if coligacao_selecionada != "Todas":
         df_base_filtrada_gap = df_base_filtrada_gap[df_base_filtrada_gap['Cliente_Coligacao'] == coligacao_selecionada]
     
@@ -438,9 +407,6 @@ if industria_filtro != "Todas" or modo_gap:
 
 st.divider()
 
-# ============================================================
-# RELATÓRIO
-# ============================================================
 # ============================================================
 # RELATÓRIO
 # ============================================================
@@ -472,29 +438,15 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
     csv = matriz_bin.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Baixar CSV",
-        data=csv,
-        file_name=f'positivacao_{datetime.now().strftime("%Y%m%d")}.csv',
-        mime='text/csv',
-        use_container_width=True
-    )
+    st.download_button("📥 Baixar CSV", data=csv, file_name=f'positivacao_{datetime.now().strftime("%Y%m%d")}.csv', mime='text/csv', use_container_width=True)
 
 with col2:
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         matriz_bin.to_excel(writer, index=False, sheet_name='Positivação')
-    excel_data = output.getvalue()
-    st.download_button(
-        label="📥 Baixar Excel",
-        data=excel_data,
-        file_name=f'positivacao_{datetime.now().strftime("%Y%m%d")}.xlsx',
-        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        use_container_width=True
-    )
+    st.download_button("📥 Baixar Excel", data=output.getvalue(), file_name=f'positivacao_{datetime.now().strftime("%Y%m%d")}.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', use_container_width=True)
 
 with col3:
-    # Criar HTML para PDF
     html_pdf = f"""
     <html>
     <head>
@@ -547,75 +499,11 @@ with col3:
     </html>
     """
     
-    st.download_button(
-        label="📥 Baixar PDF (HTML)",
-        data=html_pdf.encode('utf-8'),
-        file_name=f'positivacao_{datetime.now().strftime("%Y%m%d")}.html',
-        mime='text/html',
-        use_container_width=True
-    )
+    st.download_button("📥 Baixar PDF (HTML)", data=html_pdf.encode('utf-8'), file_name=f'positivacao_{datetime.now().strftime("%Y%m%d")}.html', mime='text/html', use_container_width=True)
     st.caption("💡 Abra o arquivo HTML e salve como PDF (Ctrl+P)")
 
 with st.expander("👁️ Visualizar tabela"):
     st.dataframe(matriz_bin, use_container_width=True, hide_index=True)
-    
-    st.divider()
-
-# ============================================================
-# PERFORMANCE
-# ============================================================
-st.subheader("👥 Performance por Vendedor")
-
-df_base_filtrada = df_base.copy()
-if coordenador_selecionado != "Todos":
-    vendedores_do_coord = df_base[df_base['Nome_Coordenador'] == coordenador_selecionado]['nome_vendedor_base'].unique()
-    df_base_filtrada = df_base_filtrada[df_base_filtrada['nome_vendedor_base'].isin(vendedores_do_coord)]
-if coligacao_selecionada != "Todas":
-    df_base_filtrada = df_base_filtrada[df_base_filtrada['Cliente_Coligacao'] == coligacao_selecionada]
-
-vendedores_base = df_base_filtrada['nome_vendedor_base'].dropna().unique()
-
-perf_list = []
-for vendedor in vendedores_base:
-    clientes_carteira = df_base_filtrada[df_base_filtrada['nome_vendedor_base'] == vendedor]['codigo_cliente'].nunique()
-    df_bi_vendedor = df_filtrado[df_filtrado['nome_vendedor'] == vendedor]
-    clientes_positivados = df_bi_vendedor[df_bi_vendedor['Nome_Fabricante'].notna()]['codigo_cliente'].nunique()
-    cobertura = df_bi_vendedor.groupby('codigo_cliente')['Nome_Fabricante'].nunique()
-    cobertura_media = cobertura.mean() if len(cobertura) > 0 else 0
-    cobertura_total_vendedor = df_bi_vendedor[['codigo_cliente', 'Nome_Fabricante']].dropna().drop_duplicates().shape[0]
-    pct = (clientes_positivados / clientes_carteira * 100) if clientes_carteira > 0 else 0
-    
-    perf_list.append({
-        'Vendedor': vendedor,
-        'Total_Clientes': clientes_carteira,
-        'Clientes_Positivados': clientes_positivados,
-        '%_Positivação': round(pct, 1),
-        'Cobertura_Media': round(cobertura_media, 1),
-        'Cobertura_Total': cobertura_total_vendedor
-    })
-
-perf_vendedor = pd.DataFrame(perf_list)
-perf_vendedor = perf_vendedor.sort_values('%_Positivação', ascending=False)
-
-col1, col2 = st.columns(2)
-
-with col1:
-    fig_bar = px.bar(perf_vendedor, x='Vendedor', y='%_Positivação', title='% de Positivação por Vendedor',
-                     text=perf_vendedor['%_Positivação'].apply(lambda x: f'{x:.1f}%'),
-                     color='%_Positivação', color_continuous_scale='Greens')
-    fig_bar.update_traces(textposition='outside')
-    fig_bar.update_layout(xaxis_title="", yaxis_title="% Positivação", yaxis_range=[0, 105])
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-with col2:
-    fig_bar2 = px.bar(perf_vendedor, x='Vendedor', y='Cobertura_Media', title='Cobertura Média por Vendedor',
-                      text=perf_vendedor['Cobertura_Media'].apply(lambda x: f'{x:.1f}'),
-                      color='Cobertura_Media', color_continuous_scale='Blues')
-    fig_bar2.update_traces(textposition='outside')
-    fig_bar2.update_layout(xaxis_title="", yaxis_title="Cobertura Média")
-    st.plotly_chart(fig_bar2, use_container_width=True)
-
-st.dataframe(perf_vendedor, use_container_width=True, hide_index=True)
 
 st.divider()
 
@@ -677,7 +565,7 @@ else:
     st.warning("Nenhum cliente encontrado.")
 
 # ============================================================
-# RODAPÉ
+# RODAPÉ COM DATAS
 # ============================================================
 st.divider()
 col1, col2 = st.columns(2)
