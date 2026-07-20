@@ -8,12 +8,13 @@ import os
 from io import BytesIO
 
 # ============================================================
-# CONFIGURAÇÃO DA PÁGINA
+# CONFIGURAÇÃO DA PÁGINA (BARRA LATERAL ABERTA POR PADRÃO)
 # ============================================================
 st.set_page_config(
     page_title="Dashboard - Positivação & Cobertura",
     page_icon="📊",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 st.title("📊 Dashboard de Positivação e Cobertura")
@@ -82,12 +83,10 @@ def load_data():
         suffixes=('', '_fb')
     )
 
-    # Preencher vazios do merge principal
     for col in ['nome_cliente', 'Cliente_Coligacao', 'Nome_Coordenador']:
         if col in df_merged.columns and f'{col}_fb' in df_fallback.columns:
             df_merged[col] = df_merged[col].fillna(df_fallback[f'{col}_fb'])
 
-    # Nome do vendedor padronizado
     df_merged['nome_vendedor'] = df_merged['nome_vendedor_bi']
 
     return df_base, df_bi, df_merged, data_dados
@@ -106,7 +105,7 @@ INDUSTRIAS = [i for i in INDUSTRIAS if i.strip() != '']
 TOTAL_INDUSTRIAS = len(INDUSTRIAS)
 
 # ============================================================
-# FILTROS (VENDEDOR OBRIGATÓRIO, SEM COORDENADOR)
+# FILTROS (VENDEDOR OBRIGATÓRIO, BARRA LATERAL ABERTA)
 # ============================================================
 st.sidebar.header("🎯 Filtros")
 
@@ -158,6 +157,12 @@ if vendedor_selecionado == "":
     st.stop()
 else:
     st.session_state['vendedor'] = vendedor_selecionado
+
+# --- EXIBIR NOME DO VENDEDOR E COORDENADOR (SUGESTÃO 4) ---
+vendedor_info = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado].iloc[0]
+coordenador_nome = vendedor_info['Nome_Coordenador'] if pd.notna(vendedor_info['Nome_Coordenador']) else "Não informado"
+st.markdown(f"**Vendedor:** {vendedor_selecionado}")
+st.markdown(f"**Coordenador:** {coordenador_nome}")
 
 # --- COLIGAÇÃO ---
 clientes_do_vendedor = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado]['codigo_cliente'].unique()
@@ -260,16 +265,45 @@ if industria_filtro != "Todas":
     df_filtrado = df_filtrado[df_filtrado['Nome_Fabricante'] == industria_filtro]
 
 # ============================================================
-# MÉTRICAS DA CARTEIRA ATIVA (NOVO)
+# CARTEIRA ATIVA TOTAL (TODO O HISTÓRICO DO VENDEDOR)
 # ============================================================
-total_clientes_ativos = df_filtrado['codigo_cliente'].nunique()
-total_positivados_ativos = df_filtrado[df_filtrado['Nome_Fabricante'].notna()]['codigo_cliente'].nunique()
-pct_positivacao_ativa = (total_positivados_ativos / total_clientes_ativos * 100) if total_clientes_ativos > 0 else 0
+# Clientes únicos que compraram em qualquer mês (histórico completo)
+carteira_ativa_total = df_merged[
+    (df_merged['nome_vendedor'] == vendedor_selecionado) &
+    (df_merged['Nome_Fabricante'].notna())
+]['codigo_cliente'].nunique()
 
+# Positivados no período selecionado
+total_positivados_ativos = df_filtrado[df_filtrado['Nome_Fabricante'].notna()]['codigo_cliente'].nunique()
+pct_positivacao_ativa = (total_positivados_ativos / carteira_ativa_total * 100) if carteira_ativa_total > 0 else 0
+
+# Clientes sem venda no período (GAP)
+clientes_ativos_ids = df_merged[
+    (df_merged['nome_vendedor'] == vendedor_selecionado) &
+    (df_merged['Nome_Fabricante'].notna())
+]['codigo_cliente'].unique()
+
+clientes_positivados_ids = df_filtrado[df_filtrado['Nome_Fabricante'].notna()]['codigo_cliente'].unique()
+clientes_sem_venda = [c for c in clientes_ativos_ids if c not in clientes_positivados_ids]
+
+# ============================================================
+# MÉTRICAS DA CARTEIRA ATIVA (SUGESTÃO 2)
+# ============================================================
+st.subheader("📅 Carteira Ativa")
 col_a1, col_a2, col_a3 = st.columns(3)
-col_a1.metric("📅 Carteira Ativa no Período", total_clientes_ativos)
+col_a1.metric("📅 Carteira Ativa Total (histórico)", carteira_ativa_total)
 col_a2.metric("✅ Positivados no Período", total_positivados_ativos)
 col_a3.metric("📈 % Positivação (Carteira Ativa)", f"{pct_positivacao_ativa:.1f}%")
+
+# Destaque de clientes sem venda (SUGESTÃO 1)
+col_a4, col_a5 = st.columns(2)
+col_a4.metric("🔴 Clientes sem venda no período", len(clientes_sem_venda))
+if len(clientes_sem_venda) > 0:
+    with st.expander("👁️ Ver lista de clientes sem venda"):
+        df_sem_venda = df_base[(df_base['codigo_cliente'].isin(clientes_sem_venda)) & 
+                               (df_base['nome_vendedor_base'] == vendedor_selecionado)][['codigo_cliente', 'nome_cliente', 'Cliente_Coligacao']]
+        df_sem_venda.columns = ['Código', 'Nome', 'Coligação']
+        st.dataframe(df_sem_venda, use_container_width=True, hide_index=True)
 
 st.divider()
 
@@ -286,6 +320,7 @@ cobertura_por_cliente = df_filtrado.groupby('codigo_cliente')['Nome_Fabricante']
 cobertura_media = cobertura_por_cliente.mean() if len(cobertura_por_cliente) > 0 else 0
 cobertura_total = df_filtrado[['codigo_cliente', 'Nome_Fabricante']].dropna().drop_duplicates().shape[0]
 
+st.subheader("📋 Carteira Total")
 col1, col2, col3 = st.columns(3)
 col1.metric("📋 Clientes na Carteira", total_clientes_base)
 col2.metric("✅ Clientes Positivados", total_clientes_positivados)
