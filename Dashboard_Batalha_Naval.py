@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime
 import os
 from io import BytesIO
+import pytz
 
 # ============================================================
 # CONFIGURAÇÃO DA PÁGINA (BARRA LATERAL ABERTA POR PADRÃO)
@@ -21,14 +22,10 @@ st.title("📊 Dashboard de Positivação e Cobertura")
 st.caption("4 Elos Distribuidora Ltda. - Centro de Custo 622")
 
 # ============================================================
-# DATAS DE CONTROLE
+# DATAS DE CONTROLE (MANUAL + FUSO BRASIL)
 # ============================================================
-arquivo_atual = __file__
-if os.path.exists(arquivo_atual):
-    timestamp_compilacao = os.path.getmtime(arquivo_atual)
-    data_compilacao = datetime.fromtimestamp(timestamp_compilacao).strftime('%d/%m/%Y %H:%M')
-else:
-    data_compilacao = datetime.now().strftime('%d/%m/%Y %H:%M')
+# ⚠️ ALTERE MANUALMENTE esta data quando fizer um deploy do código
+COMPILATION_DATE = "21/07/2025 10:00"  # Formato: DD/MM/AAAA HH:MM (horário de Brasília)
 
 # ============================================================
 # CONEXÃO COM GOOGLE SHEETS
@@ -42,7 +39,9 @@ def load_data():
     df_base = pd.read_csv(url_base + "BASE")
     df_bi = pd.read_csv(url_base + "BI")
 
-    data_dados = datetime.now().strftime('%d/%m/%Y %H:%M')
+    # Data dos dados no fuso brasileiro
+    fuso_brasil = pytz.timezone('America/Sao_Paulo')
+    data_dados = datetime.now(fuso_brasil).strftime('%d/%m/%Y %H:%M')
 
     # Padronizar nomes da BASE
     df_base = df_base.rename(columns={
@@ -250,8 +249,6 @@ st.session_state['modo_gap'] = modo_gap
 # APLICAR FILTROS (sem coordenador)
 # ============================================================
 df_filtrado = df_merged.copy()
-
-# Vendedor sempre aplicado
 df_filtrado = df_filtrado[df_filtrado['nome_vendedor'] == vendedor_selecionado]
 
 if coligacao_selecionada != "Todas":
@@ -450,7 +447,7 @@ if industria_filtro != "Todas" or modo_gap:
 st.divider()
 
 # ============================================================
-# RELATÓRIO BATALHA NAVAL (NOME ALTERADO)
+# RELATÓRIO BATALHA NAVAL
 # ============================================================
 st.subheader("📋 Relatório Batalha Naval")
 
@@ -611,5 +608,5 @@ else:
 # ============================================================
 st.divider()
 col1, col2 = st.columns(2)
-col1.caption(f"📅 Dashboard compilado em: {data_compilacao}")
+col1.caption(f"📅 Dashboard compilado em: {COMPILATION_DATE}")
 col2.caption(f"📊 Dados carregados em: {data_dados}")
