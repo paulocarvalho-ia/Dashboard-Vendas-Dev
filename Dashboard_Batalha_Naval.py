@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime
 import os
 from io import BytesIO
-import pytz
+from zoneinfo import ZoneInfo
 
 # ============================================================
 # CONFIGURAÇÃO DA PÁGINA (BARRA LATERAL ABERTA POR PADRÃO)
@@ -22,7 +22,7 @@ st.title("📊 Dashboard de Positivação e Cobertura")
 st.caption("4 Elos Distribuidora Ltda. - Centro de Custo 622")
 
 # ============================================================
-# DATAS DE CONTROLE (MANUAL + FUSO BRASIL)
+# DATAS DE CONTROLE (MANUAL + FUSO BRASIL COM ZONEINFO)
 # ============================================================
 # ⚠️ ALTERE MANUALMENTE esta data quando fizer um deploy do código
 COMPILATION_DATE = "21/07/2025 10:00"  # Formato: DD/MM/AAAA HH:MM (horário de Brasília)
@@ -40,8 +40,7 @@ def load_data():
     df_bi = pd.read_csv(url_base + "BI")
 
     # Data dos dados no fuso brasileiro
-    fuso_brasil = pytz.timezone('America/Sao_Paulo')
-    data_dados = datetime.now(fuso_brasil).strftime('%d/%m/%Y %H:%M')
+    data_dados = datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')
 
     # Padronizar nomes da BASE
     df_base = df_base.rename(columns={
