@@ -158,7 +158,7 @@ if vendedor_selecionado == "":
 else:
     st.session_state['vendedor'] = vendedor_selecionado
 
-# --- EXIBIR NOME DO VENDEDOR E COORDENADOR (SUGESTÃO 4) ---
+# --- EXIBIR NOME DO VENDEDOR E COORDENADOR ---
 vendedor_info = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado].iloc[0]
 coordenador_nome = vendedor_info['Nome_Coordenador'] if pd.notna(vendedor_info['Nome_Coordenador']) else "Não informado"
 st.markdown(f"**Vendedor:** {vendedor_selecionado}")
@@ -267,27 +267,24 @@ if industria_filtro != "Todas":
 # ============================================================
 # CARTEIRA ATIVA TOTAL (TODO O HISTÓRICO DO VENDEDOR)
 # ============================================================
-# Clientes únicos que compraram em qualquer mês (histórico completo)
 carteira_ativa_total = df_merged[
     (df_merged['nome_vendedor'] == vendedor_selecionado) &
     (df_merged['Nome_Fabricante'].notna())
 ]['codigo_cliente'].nunique()
 
-# Positivados no período selecionado
 total_positivados_ativos = df_filtrado[df_filtrado['Nome_Fabricante'].notna()]['codigo_cliente'].nunique()
 pct_positivacao_ativa = (total_positivados_ativos / carteira_ativa_total * 100) if carteira_ativa_total > 0 else 0
 
-# Clientes sem venda no período (GAP)
 clientes_ativos_ids = df_merged[
     (df_merged['nome_vendedor'] == vendedor_selecionado) &
     (df_merged['Nome_Fabricante'].notna())
 ]['codigo_cliente'].unique()
 
 clientes_positivados_ids = df_filtrado[df_filtrado['Nome_Fabricante'].notna()]['codigo_cliente'].unique()
-clientes_sem_venda = [c for c in clientes_ativos_ids if c not in clientes_positivados_ids]
+clientes_sem_venda_ativos = [c for c in clientes_ativos_ids if c not in clientes_positivados_ids]
 
 # ============================================================
-# MÉTRICAS DA CARTEIRA ATIVA (SUGESTÃO 2)
+# MÉTRICAS DA CARTEIRA ATIVA
 # ============================================================
 st.subheader("📅 Carteira Ativa")
 col_a1, col_a2, col_a3 = st.columns(3)
@@ -295,30 +292,31 @@ col_a1.metric("📅 Carteira Ativa Total (histórico)", carteira_ativa_total)
 col_a2.metric("✅ Positivados no Período", total_positivados_ativos)
 col_a3.metric("📈 % Positivação (Carteira Ativa)", f"{pct_positivacao_ativa:.1f}%")
 
-# Destaque de clientes sem venda (SUGESTÃO 1)
 col_a4, col_a5 = st.columns(2)
-col_a4.metric("🔴 Clientes sem venda no período", len(clientes_sem_venda))
-if len(clientes_sem_venda) > 0:
-    with st.expander("👁️ Ver lista de clientes sem venda"):
-        df_sem_venda = df_base[(df_base['codigo_cliente'].isin(clientes_sem_venda)) & 
-                               (df_base['nome_vendedor_base'] == vendedor_selecionado)][['codigo_cliente', 'nome_cliente', 'Cliente_Coligacao']]
-        df_sem_venda.columns = ['Código', 'Nome', 'Coligação']
-        st.dataframe(df_sem_venda, use_container_width=True, hide_index=True)
+col_a4.metric("🔴 Clientes sem venda no período", len(clientes_sem_venda_ativos))
+if len(clientes_sem_venda_ativos) > 0:
+    with st.expander("👁️ Ver lista de clientes sem venda (Carteira Ativa)"):
+        df_sem_venda_ativos = df_base[(df_base['codigo_cliente'].isin(clientes_sem_venda_ativos)) & 
+                                      (df_base['nome_vendedor_base'] == vendedor_selecionado)][['codigo_cliente', 'nome_cliente', 'Cliente_Coligacao']]
+        df_sem_venda_ativos.columns = ['Código', 'Nome', 'Coligação']
+        st.dataframe(df_sem_venda_ativos, use_container_width=True, hide_index=True)
 
 st.divider()
 
 # ============================================================
-# MÉTRICAS (5 CARDS EM 2 LINHAS) - Carteira Total
+# MÉTRICAS - CARTEIRA TOTAL
 # ============================================================
 total_clientes_base = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado]['codigo_cliente'].nunique()
-
-clientes_positivados_ids = df_filtrado[df_filtrado['Nome_Fabricante'].notna()]['codigo_cliente'].unique()
 total_clientes_positivados = len(clientes_positivados_ids)
 pct_positivacao = (total_clientes_positivados / total_clientes_base * 100) if total_clientes_base > 0 else 0
 
 cobertura_por_cliente = df_filtrado.groupby('codigo_cliente')['Nome_Fabricante'].nunique()
 cobertura_media = cobertura_por_cliente.mean() if len(cobertura_por_cliente) > 0 else 0
 cobertura_total = df_filtrado[['codigo_cliente', 'Nome_Fabricante']].dropna().drop_duplicates().shape[0]
+
+# Clientes da carteira total SEM VENDA no período
+todos_ids_carteira = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado]['codigo_cliente'].unique()
+clientes_sem_venda_carteira = [c for c in todos_ids_carteira if c not in clientes_positivados_ids]
 
 st.subheader("📋 Carteira Total")
 col1, col2, col3 = st.columns(3)
@@ -329,6 +327,15 @@ col3.metric("📈 % Positivação (Carteira Total)", f"{pct_positivacao:.1f}%")
 col4, col5 = st.columns(2)
 col4.metric("📊 Cobertura Média", f"{cobertura_media:.1f} ind/cliente")
 col5.metric("🏭 Cobertura Total", f"{cobertura_total} coberturas")
+
+col6, col7 = st.columns(2)
+col6.metric("🔴 Clientes sem venda no período (Carteira Total)", len(clientes_sem_venda_carteira))
+if len(clientes_sem_venda_carteira) > 0:
+    with st.expander("👁️ Ver lista de clientes sem venda (Carteira Total)"):
+        df_sem_venda_total = df_base[(df_base['codigo_cliente'].isin(clientes_sem_venda_carteira)) & 
+                                     (df_base['nome_vendedor_base'] == vendedor_selecionado)][['codigo_cliente', 'nome_cliente', 'Cliente_Coligacao']]
+        df_sem_venda_total.columns = ['Código', 'Nome', 'Coligação']
+        st.dataframe(df_sem_venda_total, use_container_width=True, hide_index=True)
 
 st.divider()
 
@@ -443,9 +450,9 @@ if industria_filtro != "Todas" or modo_gap:
 st.divider()
 
 # ============================================================
-# RELATÓRIO
+# RELATÓRIO BATALHA NAVAL (NOME ALTERADO)
 # ============================================================
-st.subheader("📋 Relatório de Positivação")
+st.subheader("📋 Relatório Batalha Naval")
 
 matriz = df_filtrado.pivot_table(
     index='codigo_cliente',
@@ -478,8 +485,8 @@ with col1:
 with col2:
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        matriz_bin.to_excel(writer, index=False, sheet_name='Positivação')
-    st.download_button("📥 Baixar Excel", data=output.getvalue(), file_name=f'positivacao_{datetime.now().strftime("%Y%m%d")}.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', use_container_width=True)
+        matriz_bin.to_excel(writer, index=False, sheet_name='Batalha Naval')
+    st.download_button("📥 Baixar Excel", data=output.getvalue(), file_name=f'batalha_naval_{datetime.now().strftime("%Y%m%d")}.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', use_container_width=True)
 
 with col3:
     html_pdf = f"""
@@ -500,7 +507,7 @@ with col3:
         </style>
     </head>
     <body>
-        <h1>Relatório de Positivação e Cobertura</h1>
+        <h1>Relatório Batalha Naval</h1>
         <h2>4 Elos Distribuidora Ltda. - Centro de Custo 622 | Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}</h2>
         <table>
             <thead>
@@ -534,7 +541,7 @@ with col3:
     </html>
     """
     
-    st.download_button("📥 Baixar PDF (HTML)", data=html_pdf.encode('utf-8'), file_name=f'positivacao_{datetime.now().strftime("%Y%m%d")}.html', mime='text/html', use_container_width=True)
+    st.download_button("📥 Baixar PDF (HTML)", data=html_pdf.encode('utf-8'), file_name=f'batalha_naval_{datetime.now().strftime("%Y%m%d")}.html', mime='text/html', use_container_width=True)
     st.caption("💡 Abra o arquivo HTML e salve como PDF (Ctrl+P)")
 
 with st.expander("👁️ Visualizar tabela"):
