@@ -23,7 +23,7 @@ st.caption("4 Elos Distribuidora Ltda. - Centro de Custo 622")
 # ============================================================
 # DATAS DE CONTROLE
 # ============================================================
-COMPILATION_DATE = "22/07/2025 11:19"  # ⚠️ Atualize a cada deploy
+COMPILATION_DATE = "22/07/2025 12:07"  # ⚠️ Atualize a cada deploy
 
 # ============================================================
 # CONEXÃO COM GOOGLE SHEETS
@@ -37,7 +37,6 @@ def load_data():
     df_base = pd.read_csv(url_base + "BASE")
     df_bi = pd.read_csv(url_base + "BI")
     
-    # Novas abas
     df_fabricantes = pd.read_csv(url_base + "FABRICANTE")
     df_vendedores = pd.read_csv(url_base + "VENDEDORES")
 
@@ -85,7 +84,6 @@ def load_data():
 
     df_merged['nome_vendedor'] = df_merged['nome_vendedor_bi']
 
-    # Criar dicionários de pastas
     fabricante_pasta = dict(zip(df_fabricantes['Nome Fabricante'], df_fabricantes['Pasta']))
     vendedor_pasta = dict(zip(df_vendedores['Vendedor'], df_vendedores['Pasta']))
     
@@ -175,7 +173,7 @@ if 'coligacao' not in st.session_state: st.session_state['coligacao'] = 'Todas'
 coligacao_selecionada = st.sidebar.selectbox("Coligação", lista_coligacoes, index=lista_coligacoes.index(st.session_state['coligacao']), key='coligacao_select')
 st.session_state['coligacao'] = coligacao_selecionada
 
-# Ano, Mês, Indústria e Modo GAP
+# Ano, Mês
 anos_disponiveis = sorted(df_merged['Ano'].dropna().unique())
 lista_anos = ["Todos"] + [str(int(a)) for a in anos_disponiveis]
 if 'ano' not in st.session_state: st.session_state['ano'] = 'Todos'
@@ -192,24 +190,34 @@ if 'mes' not in st.session_state: st.session_state['mes'] = 'Todos'
 mes_selecionado = st.sidebar.selectbox("Mês", lista_meses, index=lista_meses.index(st.session_state['mes']), key='mes_select')
 st.session_state['mes'] = mes_selecionado
 
+# -------------------- FILTRO DE INDÚSTRIA (MULTISELECT) --------------------
 st.sidebar.divider()
 st.sidebar.header("🏭 Filtro por Indústria")
-lista_industrias_filtro = ["Todas"] + INDUSTRIAS
-if 'industria_filtro' not in st.session_state: st.session_state['industria_filtro'] = 'Todas'
-industria_filtro = st.sidebar.selectbox("Indústria", lista_industrias_filtro, index=lista_industrias_filtro.index(st.session_state['industria_filtro']), key='industria_select')
-st.session_state['industria_filtro'] = industria_filtro
+# Inicializa a lista de selecionadas no session_state se não existir
+if 'industria_filtro' not in st.session_state:
+    st.session_state['industria_filtro'] = []
 
+industria_selecionada_lista = st.sidebar.multiselect(
+    "Indústria(s)",
+    options=INDUSTRIAS,
+    default=st.session_state['industria_filtro'],
+    placeholder="Digite para buscar...",
+    key='industria_multiselect'
+)
+st.session_state['industria_filtro'] = industria_selecionada_lista
+
+# --- MODO GAP ---
 if 'modo_gap' not in st.session_state: st.session_state['modo_gap'] = False
 modo_gap = st.sidebar.checkbox("🔍 Mostrar apenas NÃO positivadas (GAP)", value=st.session_state['modo_gap'], key='modo_gap_check')
 st.session_state['modo_gap'] = modo_gap
 
 # ============================================================
-# APLICAR FILTROS (E FILTRO POR PASTA NAS INDÚSTRIAS)
+# APLICAR FILTROS
 # ============================================================
 df_filtrado = df_merged.copy()
 df_filtrado = df_filtrado[df_filtrado['nome_vendedor'] == vendedor_selecionado]
 
-# Aplicar filtro de indústrias pela pasta do vendedor
+# Restrição por pasta
 df_filtrado = df_filtrado[df_filtrado['Nome_Fabricante'].isin(INDUSTRIAS)]
 
 if coligacao_selecionada != "Todas":
@@ -219,8 +227,10 @@ if ano_selecionado != "Todos":
 if mes_selecionado != "Todos":
     mes_num = int(mes_selecionado.split(' - ')[0])
     df_filtrado = df_filtrado[df_filtrado['Mês'] == mes_num]
-if industria_filtro != "Todas":
-    df_filtrado = df_filtrado[df_filtrado['Nome_Fabricante'] == industria_filtro]
+
+# Filtro por indústrias selecionadas (multiselect)
+if industria_selecionada_lista:
+    df_filtrado = df_filtrado[df_filtrado['Nome_Fabricante'].isin(industria_selecionada_lista)]
 
 # ============================================================
 # CARTEIRA ATIVA TOTAL
@@ -299,8 +309,8 @@ if coligacao_selecionada != "Todas":
     df_mensal = df_mensal[df_mensal['Cliente_Coligacao'] == coligacao_selecionada]
 if ano_selecionado != "Todos":
     df_mensal = df_mensal[df_mensal['Ano'] == int(ano_selecionado)]
-if industria_filtro != "Todas":
-    df_mensal = df_mensal[df_mensal['Nome_Fabricante'] == industria_filtro]
+if industria_selecionada_lista:
+    df_mensal = df_mensal[df_mensal['Nome_Fabricante'].isin(industria_selecionada_lista)]
 
 base_fixa = total_clientes_base
 
@@ -346,7 +356,7 @@ else:
 st.divider()
 
 # ============================================================
-# RELATÓRIO BATALHA NAVAL (COM INDÚSTRIAS FILTRADAS)
+# RELATÓRIO BATALHA NAVAL
 # ============================================================
 st.subheader("📋 Relatório Batalha Naval")
 
@@ -413,7 +423,7 @@ st.divider()
 # ============================================================
 # GAPS DE INDÚSTRIA
 # ============================================================
-if industria_filtro != "Todas" or modo_gap:
+if industria_selecionada_lista or modo_gap:
     st.subheader("🔍 Análise de GAPS")
     
     df_base_filtrada_gap = df_base[df_base['nome_vendedor_base'] == vendedor_selecionado]
@@ -422,10 +432,11 @@ if industria_filtro != "Todas" or modo_gap:
     
     todos_clientes = df_base_filtrada_gap['codigo_cliente'].unique()
     
-    if industria_filtro != "Todas":
-        clientes_com_industria = df_filtrado[df_filtrado['Nome_Fabricante'] == industria_filtro]['codigo_cliente'].unique()
+    if industria_selecionada_lista:
+        # Considera as indústrias selecionadas
+        clientes_com_industria = df_filtrado[df_filtrado['Nome_Fabricante'].notna()]['codigo_cliente'].unique()
         clientes_gap = [c for c in todos_clientes if c not in clientes_com_industria]
-        st.warning(f"🚨 Clientes que NÃO compraram {industria_filtro}: {len(clientes_gap)} de {len(todos_clientes)}")
+        st.warning(f"🚨 Clientes que NÃO compraram as indústrias selecionadas: {len(clientes_gap)} de {len(todos_clientes)}")
     else:
         clientes_com_industria = df_filtrado[df_filtrado['Nome_Fabricante'].notna()]['codigo_cliente'].unique()
         clientes_gap = [c for c in todos_clientes if c not in clientes_com_industria]
